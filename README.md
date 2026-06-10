@@ -1,6 +1,7 @@
-# FreeSpaceFinder
+# FreeSpaceFinder 
+![Screenshot](screenshot.png)
 
-FreeSpaceFinder is a Qt 6 desktop application for finding out where your disk space went. Point it at one or more folders, let it scan, and explore the results in an interactive tree view alongside a summary of the biggest space hogs. An optional built-in AI assistant (powered by the Claude API) can discuss the scan results with you and suggest what is safe to clean up.
+FreeSpaceFinder is a Qt 6 desktop application by OÜ Kaval AI for finding out where your disk space went. Point it at one or more folders, let it scan, and explore the results in an interactive tree view alongside a summary of the biggest space hogs. An optional built-in AI assistant (powered by the Claude API) can discuss the scan results with you and suggest what is safe to clean up.
 
 Licensed under GNU AFFERO GENERAL PUBLIC LICENSE by OÜ Kaval.AI.
 
