@@ -32,7 +32,7 @@ cmake --build --preset release
 
 ## Running the tests
 
-Unit tests cover the core (non-GUI) library: the file tree, scanner, analyzer, and file model.
+Unit tests cover the core (non-GUI) library: the file tree, scanner, analyzer, file model, and AI client.
 
 ```sh
 cmake --preset debug
@@ -40,14 +40,78 @@ cmake --build --preset debug
 ctest --test-dir build/debug
 ```
 
+The AI client tests that talk to the live Anthropic API are skipped unless the
+`ANTHROPIC_API_KEY` environment variable is set, so the suite passes offline.
+To include them (uses a small amount of paid API quota):
+
+```sh
+ANTHROPIC_API_KEY="sk-ant-api03-..." ctest --test-dir build/debug -R tst_aiclient --output-on-failure
+```
+
 ## AI assistant setup
 
-The chat panel needs an Anthropic API key. Either:
+The chat panel needs an Anthropic API key (get one from the
+[Anthropic Console](https://platform.claude.com/)). Without a key, the rest of
+the application works normally; only the chat panel is disabled.
 
-- enter it in the app under **Settings** (it is stored obfuscated in the application settings), or
-- set the `ANTHROPIC_API_KEY` environment variable before launching.
+### Where the key comes from
 
-Without a key, the rest of the application works normally; only the chat panel is disabled.
+At startup the key is resolved in this order:
+
+1. **Application settings** — a key previously entered under **Settings** in the app.
+2. **`ANTHROPIC_API_KEY` environment variable** — used only if no key is stored
+   in the application settings.
+
+### Where and how the key is stored
+
+When you quit the app while a key is active, the key is saved to the standard
+Qt settings location for your platform:
+
+| Platform | Location |
+|----------|----------|
+| Linux    | `~/.config/FreeSpaceFinder/FreeSpaceFinder.conf` (key `apiKeyEnc`) |
+| Windows  | Registry, `HKEY_CURRENT_USER\Software\FreeSpaceFinder\FreeSpaceFinder` |
+| macOS    | `~/Library/Preferences/com.freespacefinder.FreeSpaceFinder.plist` |
+
+The stored value is **obfuscated, not encrypted**: it is XOR-ed with a SHA-256
+digest derived from the machine ID and base64-encoded. This keeps the key out
+of plaintext config files and ties it to the machine it was saved on, but it is
+not real cryptography — anyone who can run code as your user can recover it.
+Treat the config file accordingly (don't sync or commit it).
+
+Two consequences worth knowing:
+
+- A key provided via `ANTHROPIC_API_KEY` is also saved to the settings file on
+  exit (it becomes the stored key for future launches).
+- To remove a stored key, open **Settings** in the app and clear the field —
+  the entry is deleted from the settings file on exit.
+
+### Using the environment variable
+
+```sh
+# Linux/macOS — current shell session
+export ANTHROPIC_API_KEY="sk-ant-api03-..."
+./build/release/FreeSpaceFinder
+
+# One-off launch without exporting
+ANTHROPIC_API_KEY="sk-ant-api03-..." ./build/release/FreeSpaceFinder
+```
+
+```powershell
+# Windows (PowerShell)
+$env:ANTHROPIC_API_KEY = "sk-ant-api03-..."
+.\build\release\FreeSpaceFinder.exe
+```
+
+```bat
+:: Windows (cmd)
+set ANTHROPIC_API_KEY=sk-ant-api03-...
+build\release\FreeSpaceFinder.exe
+```
+
+To make it permanent, add the `export` line to your `~/.bashrc`/`~/.zshrc`
+(Linux/macOS), or set it under *System Properties → Environment Variables*
+(Windows).
 
 ## Project layout
 

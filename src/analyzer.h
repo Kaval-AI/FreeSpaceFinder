@@ -23,6 +23,13 @@ struct AnalysisResult {
         int count = 0;
     };
 
+    struct DiskEntry {
+        QString mountPoint;   // volume root, e.g. "/" or "C:/"
+        QString device;       // e.g. "/dev/nvme0n1p2"
+        qint64 totalBytes = 0;
+        qint64 freeBytes = 0;
+    };
+
     // Overview
     QStringList scannedPaths;
     QDateTime scanTime;
@@ -37,6 +44,7 @@ struct AnalysisResult {
     QList<Entry> oldFiles;          // not accessed in > 365 days
     QList<Entry> veryOldFiles;      // not accessed in > 3 years
     QStringList emptyDirs;
+    QList<DiskEntry> disks;         // volumes containing the scanned paths
 
     // Aggregates
     qint64 oldFilesSize = 0;

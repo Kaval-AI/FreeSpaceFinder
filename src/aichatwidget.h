@@ -22,8 +22,11 @@ public:
 private slots:
     void onSendClicked();
     void onChunkReceived(const QString& text);
+    void onThinkingChunkReceived(const QString& text);
     void onAIFinished(const QString& fullResponse);
     void onAIError(const QString& error);
+    void onAIApiError(const QString& summary, const QString& hint,
+                      const QString& detail);
 
 private:
     void appendMessage(const QString& role, const QString& text);
@@ -45,7 +48,10 @@ private:
     QPushButton* m_clearButton;
 
     QLabel* m_currentAILabel = nullptr;  // label being streamed into
+    QWidget* m_currentAIRow = nullptr;   // row containing the AI bubble
     QString m_currentAIText;
+    QLabel* m_currentThinkingLabel = nullptr;  // model's thinking, if any
+    QString m_currentThinkingText;
     bool m_streaming = false;
     bool m_keyAvailable = false;
 };

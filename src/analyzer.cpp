@@ -1,5 +1,7 @@
 #include "analyzer.h"
 #include <QMap>
+#include <QSet>
+#include <QStorageInfo>
 #include <algorithm>
 
 AnalysisResult Analyzer::analyze(const FileNode* root, const QStringList& paths) {
@@ -7,6 +9,23 @@ AnalysisResult Analyzer::analyze(const FileNode* root, const QStringList& paths)
     r.scannedPaths = paths;
     r.scanTime = QDateTime::currentDateTime();
     r.totalSize = root ? root->size : 0;
+
+    // Volumes the scanned paths live on (deduplicated by mount point)
+    QSet<QString> seenMounts;
+    for (const QString& p : paths) {
+        QStorageInfo storage(p);
+        if (!storage.isValid() || !storage.isReady())
+            continue;
+        if (seenMounts.contains(storage.rootPath()))
+            continue;
+        seenMounts.insert(storage.rootPath());
+        AnalysisResult::DiskEntry d;
+        d.mountPoint = storage.rootPath();
+        d.device = QString::fromUtf8(storage.device());
+        d.totalBytes = storage.bytesTotal();
+        d.freeBytes = storage.bytesAvailable();
+        r.disks.append(d);
+    }
 
     if (!root) {
         r.aiContext = "No scan data available.";
@@ -131,6 +150,22 @@ QString Analyzer::buildAIContext(const AnalysisResult& r) const {
     ctx += QString("Total size: %1\n").arg(FileNode::formatSize(r.totalSize));
     ctx += QString("Total files: %1\n").arg(r.totalFiles);
     ctx += QString("Total directories: %1\n\n").arg(r.totalDirs);
+
+    if (!r.disks.isEmpty()) {
+        ctx += "--- DISKS (volumes containing the scanned paths) ---\n";
+        for (const auto& d : r.disks) {
+            qint64 used = d.totalBytes - d.freeBytes;
+            double usedPct = d.totalBytes > 0 ? 100.0 * used / d.totalBytes : 0.0;
+            ctx += QString("  %1 (%2): total %3 | used %4 (%5%) | free %6\n")
+                       .arg(d.mountPoint)
+                       .arg(d.device.isEmpty() ? "unknown device" : d.device)
+                       .arg(FileNode::formatSize(d.totalBytes))
+                       .arg(FileNode::formatSize(used))
+                       .arg(usedPct, 0, 'f', 1)
+                       .arg(FileNode::formatSize(d.freeBytes));
+        }
+        ctx += "\n";
+    }
 
     ctx += "--- TOP 20 LARGEST FILES ---\n";
     int nf = qMin(20, r.largestFiles.size());

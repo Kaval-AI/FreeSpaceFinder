@@ -3,6 +3,7 @@ set(TESTS
     tst_analyzer
     tst_filemodel
     tst_scanner
+    tst_aiclient
 )
 
 foreach(test ${TESTS})

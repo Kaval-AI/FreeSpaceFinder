@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QDir>
 #include "analyzer.h"
 #include "filenode.h"
 
@@ -50,6 +51,7 @@ private slots:
     void typeBreakdown();
     void emptyDirsAndSuggestions();
     void aiContextContent();
+    void diskInfoForRealPath();
     void nullRootIsInvalid();
 
 private:
@@ -148,6 +150,21 @@ void TestAnalyzer::aiContextContent() {
     QVERIFY(m_result.aiContext.contains("/data/big.iso"));
     QVERIFY(m_result.aiContext.contains("/data/old.zip"));
     QVERIFY(m_result.aiContext.contains("Total files: 4"));
+}
+
+void TestAnalyzer::diskInfoForRealPath() {
+    // "/data" from init() doesn't exist, so m_result has no disk entries.
+    // Analyze with a real path to exercise the QStorageInfo lookup.
+    Analyzer analyzer;
+    AnalysisResult r = analyzer.analyze(m_root.get(),
+                                        {QDir::tempPath(), QDir::tempPath()});
+    QCOMPARE(r.disks.size(), 1);  // duplicates collapse to one volume
+    QVERIFY(r.disks[0].totalBytes > 0);
+    QVERIFY(r.disks[0].freeBytes >= 0);
+    QVERIFY(r.disks[0].freeBytes <= r.disks[0].totalBytes);
+    QVERIFY(!r.disks[0].mountPoint.isEmpty());
+    QVERIFY(r.aiContext.contains("--- DISKS"));
+    QVERIFY(r.aiContext.contains(r.disks[0].mountPoint));
 }
 
 void TestAnalyzer::nullRootIsInvalid() {
