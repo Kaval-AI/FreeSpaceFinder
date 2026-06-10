@@ -5,7 +5,7 @@
 #include <QMainWindow>
 #include <QTreeView>
 #include <QThread>
-#include <QProgressBar>
+#include <QProgressDialog>
 #include <QLabel>
 #include <QListWidget>
 #include <QSortFilterProxyModel>
@@ -43,12 +43,11 @@ private:
     QTreeView* m_treeView;
     SummaryPanel* m_summaryPanel;
     AIChatWidget* m_chatWidget;
-    QProgressBar* m_progressBar;
+    QProgressDialog* m_progressDialog = nullptr;
     QLabel* m_statusLabel;
 
     // Actions
     QAction* m_scanAction;
-    QAction* m_cancelAction;
     QAction* m_clearAction;
 
     // Data

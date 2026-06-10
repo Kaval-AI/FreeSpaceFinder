@@ -1,3 +1,22 @@
+/*
+FreeSpaceFinder — scans folders and summarizes disk space usage, with an
+AI assistant for exploring the results.
+Copyright (C) 2026 Kaval.AI
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 #include "aichatwidget.h"
 #include <QHBoxLayout>
 #include <QFrame>
@@ -48,7 +67,6 @@ AIChatWidget::AIChatWidget(QWidget* parent) : QWidget(parent) {
     inputLayout->setContentsMargins(8, 6, 8, 6);
 
     m_inputEdit = new QLineEdit;
-    m_inputEdit->setPlaceholderText("Ask about your disk usage...");
     m_inputEdit->setStyleSheet("border:1px solid #ccc; border-radius:4px; padding:4px 8px; font-size:13px;");
 
     m_sendButton = new QPushButton("Send");
@@ -70,6 +88,7 @@ AIChatWidget::AIChatWidget(QWidget* parent) : QWidget(parent) {
     connect(m_clearButton, &QPushButton::clicked, this, &AIChatWidget::clearChat);
 
     appendSystemNote("Scan folders and click Scan to load data. Then ask questions about your disk usage.");
+    updateInputState();
 }
 
 void AIChatWidget::setAIClient(AIClient* client) {
@@ -89,6 +108,23 @@ void AIChatWidget::setContext(const QString& context) {
     appendSystemNote("Scan data loaded. You can now ask questions about your disk usage.");
 }
 
+void AIChatWidget::setApiKeyAvailable(bool available) {
+    if (m_keyAvailable == available) return;
+    m_keyAvailable = available;
+    updateInputState();
+    if (!available)
+        appendSystemNote("AI assistant disabled — set your Anthropic API key in Settings.");
+}
+
+void AIChatWidget::updateInputState() {
+    const bool enabled = m_keyAvailable && !m_streaming;
+    m_sendButton->setEnabled(enabled);
+    m_inputEdit->setEnabled(enabled);
+    m_inputEdit->setPlaceholderText(m_keyAvailable
+        ? "Ask about your disk usage..."
+        : "Set your Anthropic API key in Settings to enable the AI assistant");
+}
+
 void AIChatWidget::clearChat() {
     m_history.clear();
 
@@ -104,7 +140,7 @@ void AIChatWidget::clearChat() {
 
 void AIChatWidget::onSendClicked() {
     if (!m_client) return;
-    if (m_streaming) return;
+    if (m_streaming || !m_keyAvailable) return;
 
     QString text = m_inputEdit->text().trimmed();
     if (text.isEmpty()) return;
@@ -117,9 +153,8 @@ void AIChatWidget::onSendClicked() {
     m_inputEdit->clear();
     appendUserMessage(text);
 
-    m_sendButton->setEnabled(false);
-    m_inputEdit->setEnabled(false);
     m_streaming = true;
+    updateInputState();
     m_currentAILabel = appendAIMessagePlaceholder();
     m_currentAIText.clear();
 
@@ -137,8 +172,7 @@ void AIChatWidget::onChunkReceived(const QString& text) {
 
 void AIChatWidget::onAIFinished(const QString& fullResponse) {
     m_streaming = false;
-    m_sendButton->setEnabled(true);
-    m_inputEdit->setEnabled(true);
+    updateInputState();
     m_inputEdit->setFocus();
 
     if (!fullResponse.isEmpty())
@@ -151,8 +185,7 @@ void AIChatWidget::onAIFinished(const QString& fullResponse) {
 
 void AIChatWidget::onAIError(const QString& error) {
     m_streaming = false;
-    m_sendButton->setEnabled(true);
-    m_inputEdit->setEnabled(true);
+    updateInputState();
     m_currentAILabel = nullptr;
     m_currentAIText.clear();
     appendSystemNote("Error: " + error);

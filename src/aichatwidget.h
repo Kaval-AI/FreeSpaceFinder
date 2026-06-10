@@ -16,6 +16,7 @@ public:
 
     void setAIClient(AIClient* client);
     void setContext(const QString& context);
+    void setApiKeyAvailable(bool available);
     void clearChat();
 
 private slots:
@@ -30,6 +31,7 @@ private:
     QLabel* appendAIMessagePlaceholder();
     void appendSystemNote(const QString& text);
     void scrollToBottom();
+    void updateInputState();
 
     AIClient* m_client = nullptr;
     QString m_context;
@@ -45,4 +47,5 @@ private:
     QLabel* m_currentAILabel = nullptr;  // label being streamed into
     QString m_currentAIText;
     bool m_streaming = false;
+    bool m_keyAvailable = false;
 };

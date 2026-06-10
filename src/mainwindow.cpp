@@ -153,10 +153,6 @@ void MainWindow::setupUI() {
     m_scanAction->setToolTip("Start scanning (Ctrl+R)");
     connect(m_scanAction, &QAction::triggered, this, &MainWindow::onScan);
 
-    m_cancelAction = toolbar->addAction(QIcon(":/icons/cancel.svg"), "Cancel");
-    m_cancelAction->setEnabled(false);
-    connect(m_cancelAction, &QAction::triggered, this, &MainWindow::onCancelScan);
-
     m_clearAction = toolbar->addAction(QIcon(":/icons/clear.svg"), "Clear");
     connect(m_clearAction, &QAction::triggered, this, &MainWindow::onClear);
 
@@ -165,17 +161,10 @@ void MainWindow::setupUI() {
     auto* settingsAction = toolbar->addAction(QIcon(":/icons/settings.svg"), "Settings");
     connect(settingsAction, &QAction::triggered, this, &MainWindow::onSettings);
 
-    // Progress
     toolbar->addSeparator();
     m_statusLabel = new QLabel("Ready");
     m_statusLabel->setMinimumWidth(200);
     toolbar->addWidget(m_statusLabel);
-
-    m_progressBar = new QProgressBar;
-    m_progressBar->setRange(0, 0);
-    m_progressBar->setVisible(false);
-    m_progressBar->setFixedWidth(160);
-    toolbar->addWidget(m_progressBar);
 
     // --- Central widget ---
     auto* central = new QWidget;
@@ -308,6 +297,23 @@ void MainWindow::setupMenu() {
     fileMenu->addAction("&Settings...", this, &MainWindow::onSettings);
     fileMenu->addSeparator();
     fileMenu->addAction("&Quit", QKeySequence("Ctrl+Q"), qApp, &QApplication::quit);
+
+    auto* helpMenu = menuBar()->addMenu("&Help");
+    helpMenu->addAction("&About FreeSpaceFinder", this, [this]() {
+        QMessageBox::about(this, "About FreeSpaceFinder",
+            "<h3>FreeSpaceFinder " + QApplication::applicationVersion() + "</h3>"
+            "<p>Scans folders and summarizes disk space usage, with an "
+            "AI assistant for exploring the results.</p>"
+            "<p>All scans are strictly read-only — this program never "
+            "modifies your files.</p>"
+            "<p>Copyright &copy; 2026 "
+            "<a href=\"https://kaval.ai\">Kaval.AI</a></p>"
+            "<p>This program is free software, licensed under the "
+            "<a href=\"https://www.gnu.org/licenses/agpl-3.0.html\">"
+            "GNU Affero General Public License v3.0</a> or later. "
+            "It comes with ABSOLUTELY NO WARRANTY.</p>");
+    });
+    helpMenu->addAction("About &Qt", qApp, &QApplication::aboutQt);
 }
 
 void MainWindow::loadSettings() {
@@ -328,6 +334,7 @@ void MainWindow::loadSettings() {
         apiKey = qEnvironmentVariable("ANTHROPIC_API_KEY");
     if (!apiKey.isEmpty())
         m_aiClient->setApiKey(apiKey);
+    m_chatWidget->setApiKeyAvailable(!m_aiClient->apiKey().isEmpty());
     restoreGeometry(s.value("geometry").toByteArray());
 }
 
@@ -378,6 +385,23 @@ void MainWindow::onScan() {
     m_chatWidget->clearChat();
 
     setScanningState(true);
+
+    if (!m_progressDialog) {
+        m_progressDialog = new QProgressDialog(this);
+        m_progressDialog->setWindowTitle("Scanning");
+        m_progressDialog->setRange(0, 0);  // indeterminate busy indicator
+        m_progressDialog->setMinimumWidth(440);
+        m_progressDialog->setWindowModality(Qt::WindowModal);
+        m_progressDialog->setMinimumDuration(0);
+        m_progressDialog->setAutoClose(false);
+        m_progressDialog->setAutoReset(false);
+        m_progressDialog->setCancelButtonText("Cancel");
+        connect(m_progressDialog, &QProgressDialog::canceled,
+                this, &MainWindow::onCancelScan);
+    }
+    m_progressDialog->setLabelText("Scanning...");
+    m_progressDialog->show();
+
     QMetaObject::invokeMethod(m_scanner, "scan", Qt::QueuedConnection,
                               Q_ARG(QStringList, paths));
 }
@@ -386,7 +410,6 @@ void MainWindow::onCancelScan() {
     // Direct call — sets an atomic flag the scan loop polls. A queued slot
     // invocation would never be delivered while scan() blocks the worker thread.
     m_scanner->cancel();
-    m_cancelAction->setEnabled(false);
     m_statusLabel->setText("Cancelling...");
     statusBar()->showMessage("Cancelling scan...");
 }
@@ -404,19 +427,32 @@ void MainWindow::onSettings() {
     QString key = QInputDialog::getText(
         this, "API Key", "Enter Anthropic API key:",
         QLineEdit::Password, m_aiClient->apiKey(), &ok);
-    if (ok)
+    if (ok) {
         m_aiClient->setApiKey(key);
+        m_chatWidget->setApiKeyAvailable(!m_aiClient->apiKey().isEmpty());
+    }
 }
 
 void MainWindow::onScanProgress(const QString& path, qint64 files, qint64 size) {
     QString shortenedPath = path.length() > 60 ? "..." + path.right(57) : path;
-    m_statusLabel->setText(QString("Scanning... %1 files (%2)")
-                               .arg(files).arg(FileNode::formatSize(size)));
+    QString stats = QString("%1 files (%2)").arg(files).arg(FileNode::formatSize(size));
+    m_statusLabel->setText("Scanning... " + stats);
     statusBar()->showMessage("Scanning: " + shortenedPath);
+    if (m_progressDialog && m_progressDialog->isVisible() &&
+        !m_progressDialog->wasCanceled()) {
+        m_progressDialog->setLabelText(
+            QString("Scanning...\n%1\n%2").arg(stats, shortenedPath));
+    }
 }
 
 void MainWindow::onScanFinished(FileNode* root, bool cancelled) {
     setScanningState(false);
+    if (m_progressDialog) {
+        // Block canceled() — reset()/hide() must not be mistaken for a user cancel
+        QSignalBlocker blocker(m_progressDialog);
+        m_progressDialog->reset();
+        m_progressDialog->hide();
+    }
 
     QStringList paths;
     for (int i = 0; i < m_folderList->count(); ++i)
@@ -455,8 +491,6 @@ void MainWindow::onScanError(const QString& msg) {
 
 void MainWindow::setScanningState(bool scanning) {
     m_scanAction->setEnabled(!scanning);
-    m_cancelAction->setEnabled(scanning);
     m_clearAction->setEnabled(!scanning);
-    m_progressBar->setVisible(scanning);
     if (!scanning) m_statusLabel->setText("Ready");
 }
