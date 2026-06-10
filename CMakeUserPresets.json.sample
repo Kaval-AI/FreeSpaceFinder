@@ -1,0 +1,19 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "debug",
+      "inherits": "debug",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/path/to/Qt/6.x.x/gcc_64"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "release",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/path/to/Qt/6.x.x/gcc_64"
+      }
+    }
+  ]
+}

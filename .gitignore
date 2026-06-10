@@ -3,3 +3,6 @@ cmake-build-*/
 CMakeUserPresets.json
 .idea/cmake.xml
 *.user
+compile_commands.json
+CMakeCache.txt
+CMakeFiles
