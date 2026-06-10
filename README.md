@@ -91,6 +91,7 @@ Two consequences worth knowing:
 
 ### Using the environment variable
 
+
 ```sh
 # Linux/macOS — current shell session
 export ANTHROPIC_API_KEY="sk-ant-api03-..."
