@@ -11,11 +11,16 @@ public:
 
 public slots:
     void scan(const QStringList& paths);
+
+public:
+    // Thread-safe: only sets an atomic flag. Call directly from any thread —
+    // do NOT invoke via a queued connection, the worker's event loop is busy
+    // inside scan() and would only deliver it after the scan completes.
     void cancel() { m_cancelled.store(true); }
 
 signals:
     void progress(const QString& currentPath, qint64 filesScanned, qint64 totalSize);
-    void finished(FileNode* root);   // receiver takes ownership
+    void finished(FileNode* root, bool cancelled);   // receiver takes ownership of root
     void errorOccurred(const QString& message);
 
 private:

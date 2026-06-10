@@ -155,7 +155,7 @@ void MainWindow::setupUI() {
 
     m_cancelAction = toolbar->addAction(QIcon(":/icons/cancel.svg"), "Cancel");
     m_cancelAction->setEnabled(false);
-    connect(m_cancelAction, &QAction::triggered, m_scanner, &Scanner::cancel);
+    connect(m_cancelAction, &QAction::triggered, this, &MainWindow::onCancelScan);
 
     m_clearAction = toolbar->addAction(QIcon(":/icons/clear.svg"), "Clear");
     connect(m_clearAction, &QAction::triggered, this, &MainWindow::onClear);
@@ -383,9 +383,12 @@ void MainWindow::onScan() {
 }
 
 void MainWindow::onCancelScan() {
+    // Direct call — sets an atomic flag the scan loop polls. A queued slot
+    // invocation would never be delivered while scan() blocks the worker thread.
     m_scanner->cancel();
-    setScanningState(false);
-    statusBar()->showMessage("Scan cancelled.");
+    m_cancelAction->setEnabled(false);
+    m_statusLabel->setText("Cancelling...");
+    statusBar()->showMessage("Cancelling scan...");
 }
 
 void MainWindow::onClear() {
@@ -412,7 +415,7 @@ void MainWindow::onScanProgress(const QString& path, qint64 files, qint64 size) 
     statusBar()->showMessage("Scanning: " + shortenedPath);
 }
 
-void MainWindow::onScanFinished(FileNode* root) {
+void MainWindow::onScanFinished(FileNode* root, bool cancelled) {
     setScanningState(false);
 
     QStringList paths;
@@ -431,13 +434,18 @@ void MainWindow::onScanFinished(FileNode* root) {
     m_summaryPanel->setResult(m_lastResult);
     m_chatWidget->setContext(m_lastResult.aiContext);
 
-    statusBar()->showMessage(
-        QString("Scan complete — %1 files, %2 dirs, %3 total")
-            .arg(m_lastResult.totalFiles)
-            .arg(m_lastResult.totalDirs)
-            .arg(FileNode::formatSize(m_lastResult.totalSize)));
+    QString stats = QString("%1 files, %2 dirs, %3 total")
+                        .arg(m_lastResult.totalFiles)
+                        .arg(m_lastResult.totalDirs)
+                        .arg(FileNode::formatSize(m_lastResult.totalSize));
+    statusBar()->showMessage((cancelled ? "Scan cancelled — " : "Scan complete — ") + stats);
     m_statusLabel->setText(FileNode::formatSize(m_lastResult.totalSize) +
                            " in " + QString::number(m_lastResult.totalFiles) + " files");
+
+    if (cancelled) {
+        QMessageBox::information(this, "Scan Cancelled",
+            QString("Scanning was cancelled.\n\nPartial results are shown: %1.").arg(stats));
+    }
 }
 
 void MainWindow::onScanError(const QString& msg) {

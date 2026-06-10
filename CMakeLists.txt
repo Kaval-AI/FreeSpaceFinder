@@ -7,12 +7,10 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Network Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network Concurrent Test)
 
-qt_add_executable(FreeSpaceFinder
-    src/main.cpp
-    src/mainwindow.h
-    src/mainwindow.cpp
+# Core (non-GUI) logic — shared by the app and the unit tests
+qt_add_library(FreeSpaceFinderCore STATIC
     src/filenode.h
     src/scanner.h
     src/scanner.cpp
@@ -22,6 +20,19 @@ qt_add_executable(FreeSpaceFinder
     src/analyzer.cpp
     src/aiclient.h
     src/aiclient.cpp
+)
+
+target_link_libraries(FreeSpaceFinderCore PUBLIC
+    Qt6::Core
+    Qt6::Network
+)
+
+target_include_directories(FreeSpaceFinderCore PUBLIC src)
+
+qt_add_executable(FreeSpaceFinder
+    src/main.cpp
+    src/mainwindow.h
+    src/mainwindow.cpp
     src/summarypanel.h
     src/summarypanel.cpp
     src/aichatwidget.h
@@ -42,23 +53,26 @@ qt_add_resources(FreeSpaceFinder "icons"
 )
 
 target_link_libraries(FreeSpaceFinder PRIVATE
+    FreeSpaceFinderCore
     Qt6::Widgets
-    Qt6::Network
     Qt6::Concurrent
 )
 
-target_include_directories(FreeSpaceFinder PRIVATE src)
-
-target_compile_options(FreeSpaceFinder PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
-    $<$<CONFIG:Debug>:-g -O0 -fno-omit-frame-pointer>
-    $<$<CONFIG:Release>:-O2>
-)
+foreach(target FreeSpaceFinderCore FreeSpaceFinder)
+    target_compile_options(${target} PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
+        $<$<CONFIG:Debug>:-g -O0 -fno-omit-frame-pointer>
+        $<$<CONFIG:Release>:-O2>
+    )
+endforeach()
 
 set_target_properties(FreeSpaceFinder PROPERTIES
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
 )
+
+enable_testing()
+add_subdirectory(tests)
 
 # Symlink compile_commands.json to project root for clangd
 if(CMAKE_EXPORT_COMPILE_COMMANDS)

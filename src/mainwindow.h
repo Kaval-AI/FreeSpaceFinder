@@ -28,7 +28,7 @@ private slots:
     void onClear();
     void onSettings();
     void onScanProgress(const QString& path, qint64 files, qint64 size);
-    void onScanFinished(FileNode* root);
+    void onScanFinished(FileNode* root, bool cancelled);
     void onScanError(const QString& msg);
 
 private:

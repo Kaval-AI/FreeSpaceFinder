@@ -63,7 +63,7 @@ void Scanner::scan(const QStringList& paths) {
     for (int i = 0; i < static_cast<int>(root->children.size()); ++i)
         root->children[i]->rowInParent = i;
 
-    emit finished(root);
+    emit finished(root, m_cancelled.load());
 }
 
 void Scanner::scanDirectory(FileNode* dirNode, const QString& path) {
