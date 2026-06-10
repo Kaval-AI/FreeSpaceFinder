@@ -1,0 +1,138 @@
+name: Build
+
+on:
+  push:
+    branches: [master, main]
+    tags: ["v*"]
+  pull_request:
+
+env:
+  QT_VERSION: "6.8.*"
+  # Headless runners have no display; harmless for the GUI-less tests
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            artifact: FreeSpaceFinder-linux-x86_64.AppImage
+          - name: Windows
+            os: windows-latest
+            artifact: FreeSpaceFinder-windows-x64.zip
+          - name: macOS
+            os: macos-latest
+            artifact: FreeSpaceFinder-macos-universal.dmg
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0
+          # FUSE for running the linuxdeploy AppImages (renamed in Ubuntu 24.04)
+          sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
+
+      - name: Set up MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      - name: Configure
+        shell: bash
+        run: |
+          EXTRA_ARGS=()
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            EXTRA_ARGS+=(-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64")
+          fi
+          cmake --preset release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" "${EXTRA_ARGS[@]}"
+
+      - name: Build
+        shell: bash
+        run: cmake --build --preset release
+
+      - name: Run tests
+        shell: bash
+        run: ctest --test-dir build/release --output-on-failure
+
+      # --- Packaging ---------------------------------------------------------
+
+      - name: Package (Linux AppImage)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fLO https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -fLO https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-*.AppImage
+
+          mkdir -p pkg
+          cat > pkg/freespacefinder.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=FreeSpaceFinder
+          Comment=Find out where your disk space went
+          Exec=FreeSpaceFinder
+          Icon=freespacefinder
+          Categories=Utility;FileTools;
+          EOF
+          cp resources/icons/app.svg pkg/freespacefinder.svg
+
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
+            --executable build/release/FreeSpaceFinder \
+            --desktop-file pkg/freespacefinder.desktop \
+            --icon-file pkg/freespacefinder.svg \
+            --plugin qt --output appimage
+          mv FreeSpaceFinder-*.AppImage "${{ matrix.artifact }}"
+
+      - name: Package (Windows zip)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir deploy
+          cp build/release/FreeSpaceFinder.exe deploy/
+          windeployqt --release --no-translations deploy/FreeSpaceFinder.exe
+          7z a "${{ matrix.artifact }}" ./deploy/*
+
+      - name: Package (macOS dmg)
+        if: runner.os == 'macOS'
+        run: |
+          macdeployqt build/release/FreeSpaceFinder.app -dmg
+          mv build/release/FreeSpaceFinder.dmg "${{ matrix.artifact }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/*
+          generate_release_notes: true
