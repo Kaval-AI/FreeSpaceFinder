@@ -220,11 +220,14 @@ void MainWindow::setupUI() {
     m_treeView = new QTreeView;
     m_treeView->setModel(m_proxyModel);
     m_treeView->setItemDelegateForColumn(FileModel::ColSize, new SizeBarDelegate(this));
-    m_treeView->header()->setSectionResizeMode(FileModel::ColName, QHeaderView::Stretch);
-    m_treeView->header()->setSectionResizeMode(FileModel::ColSize, QHeaderView::Interactive);
-    m_treeView->header()->setSectionResizeMode(FileModel::ColLastAccessed, QHeaderView::ResizeToContents);
-    m_treeView->header()->setSectionResizeMode(FileModel::ColModified, QHeaderView::ResizeToContents);
+    // All columns user-resizable; Name gets the lion's share by default
+    m_treeView->header()->setSectionResizeMode(QHeaderView::Interactive);
+    m_treeView->header()->setStretchLastSection(false);
+    m_treeView->header()->setMinimumSectionSize(60);
+    m_treeView->header()->resizeSection(FileModel::ColName, 420);
     m_treeView->header()->resizeSection(FileModel::ColSize, 160);
+    m_treeView->header()->resizeSection(FileModel::ColLastAccessed, 120);
+    m_treeView->header()->resizeSection(FileModel::ColModified, 120);
     m_treeView->setSortingEnabled(true);
     m_treeView->setAlternatingRowColors(true);
     m_treeView->setAnimated(true);
