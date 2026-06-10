@@ -23,6 +23,8 @@ FileNode* FileModel::nodeFromIndex(const QModelIndex& index) const {
 
 QModelIndex FileModel::index(int row, int column, const QModelIndex& parentIdx) const {
     if (!m_root) return {};
+    // Only column 0 of a row has children (QAbstractItemModel convention)
+    if (parentIdx.isValid() && parentIdx.column() != 0) return {};
     FileNode* parentNode = nodeFromIndex(parentIdx);
     if (!parentNode) return {};
     if (row < 0 || row >= static_cast<int>(parentNode->children.size())) return {};
@@ -40,6 +42,7 @@ QModelIndex FileModel::parent(const QModelIndex& child) const {
 
 int FileModel::rowCount(const QModelIndex& parentIdx) const {
     if (!m_root) return 0;
+    if (parentIdx.isValid() && parentIdx.column() != 0) return 0;
     FileNode* node = nodeFromIndex(parentIdx);
     if (!node) return 0;
     return static_cast<int>(node->children.size());
@@ -51,6 +54,7 @@ int FileModel::columnCount(const QModelIndex&) const {
 
 bool FileModel::hasChildren(const QModelIndex& parentIdx) const {
     if (!m_root) return false;
+    if (parentIdx.isValid() && parentIdx.column() != 0) return false;
     FileNode* node = nodeFromIndex(parentIdx);
     if (!node) return false;
     return !node->children.empty();
