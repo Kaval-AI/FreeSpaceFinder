@@ -71,7 +71,7 @@ void AIClient::sendMessage(const QString& systemPrompt,
     thinking["type"] = "adaptive";
     body["thinking"] = thinking;
 
-    QNetworkRequest request(QUrl(API_URL));
+    QNetworkRequest request{QUrl(QString::fromLatin1(API_URL))};
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("x-api-key", m_apiKey.toUtf8());
     request.setRawHeader("anthropic-version", "2023-06-01");

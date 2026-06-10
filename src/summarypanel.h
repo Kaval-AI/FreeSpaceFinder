@@ -19,6 +19,7 @@ private:
     void populateTable(QTableWidget* table, const QList<AnalysisResult::Entry>& entries, bool showType);
     void populateTypeTable(QTableWidget* table, const QList<AnalysisResult::TypeEntry>& types,
                            qint64 totalSize);
+    void installCopyMenu(QTableWidget* table, bool firstColumnIsPath);
 
     QTabWidget* m_tabs;
     QLabel*      m_overviewLabel;

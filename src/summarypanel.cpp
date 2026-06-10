@@ -1,6 +1,12 @@
 #include "summarypanel.h"
 #include <QVBoxLayout>
 #include <QHeaderView>
+#include <QMenu>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QFileInfo>
 
 SummaryPanel::SummaryPanel(QWidget* parent) : QWidget(parent) {
     auto* layout = new QVBoxLayout(this);
@@ -54,6 +60,48 @@ SummaryPanel::SummaryPanel(QWidget* parent) : QWidget(parent) {
     m_suggestionsView = new QTextBrowser;
     m_suggestionsView->setContentsMargins(12, 12, 12, 12);
     m_tabs->addTab(m_suggestionsView, "Suggestions");
+
+    installCopyMenu(m_largestFilesTable, true);
+    installCopyMenu(m_largestDirsTable, true);
+    installCopyMenu(m_oldFilesTable, true);
+    installCopyMenu(m_byTypeTable, false);
+}
+
+void SummaryPanel::installCopyMenu(QTableWidget* table, bool firstColumnIsPath) {
+    table->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(table, &QTableWidget::customContextMenuRequested, table,
+            [table, firstColumnIsPath](const QPoint& pos) {
+        QTableWidgetItem* item = table->itemAt(pos);
+        if (!item) return;
+        QTableWidgetItem* first = table->item(item->row(), 0);
+        QString firstText = first ? first->text() : QString();
+
+        QMenu menu(table);
+        if (firstColumnIsPath) {
+            QAction* copyPath = menu.addAction("Copy path");
+            QObject::connect(copyPath, &QAction::triggered, table, [firstText]() {
+                QGuiApplication::clipboard()->setText(firstText);
+            });
+            QAction* copyName = menu.addAction("Copy name");
+            QObject::connect(copyName, &QAction::triggered, table, [firstText]() {
+                QGuiApplication::clipboard()->setText(QFileInfo(firstText).fileName());
+            });
+            QAction* open = menu.addAction("Open containing folder");
+            QObject::connect(open, &QAction::triggered, table, [firstText]() {
+                QFileInfo fi(firstText);
+                QString dir = fi.isDir() ? fi.absoluteFilePath() : fi.absolutePath();
+                QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+            });
+            menu.addSeparator();
+        }
+        QString cellText = item->text();
+        QAction* copyCell = menu.addAction(QString("Copy \"%1\"")
+            .arg(cellText.length() > 40 ? cellText.left(37) + "..." : cellText));
+        QObject::connect(copyCell, &QAction::triggered, table, [cellText]() {
+            QGuiApplication::clipboard()->setText(cellText);
+        });
+        menu.exec(table->viewport()->mapToGlobal(pos));
+    });
 }
 
 void SummaryPanel::clear() {

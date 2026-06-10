@@ -26,9 +26,19 @@ qt_add_executable(FreeSpaceFinder
     src/summarypanel.cpp
     src/aichatwidget.h
     src/aichatwidget.cpp
-        main.cpp
-        main.cpp
-        main.cpp
+)
+
+qt_add_resources(FreeSpaceFinder "icons"
+    PREFIX "/icons"
+    BASE resources/icons
+    FILES
+        resources/icons/app.svg
+        resources/icons/add-folder.svg
+        resources/icons/remove-folder.svg
+        resources/icons/scan.svg
+        resources/icons/cancel.svg
+        resources/icons/clear.svg
+        resources/icons/settings.svg
 )
 
 target_link_libraries(FreeSpaceFinder PRIVATE

@@ -19,6 +19,46 @@
 #include <QStyleOption>
 #include <QLabel>
 #include <QAction>
+#include <QMenu>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QFileInfo>
+#include <QCryptographicHash>
+#include <QSysInfo>
+
+// --- API key obfuscation -----------------------------------------------------
+// XOR with a SHA-256 digest derived from the machine ID, then base64. This keeps
+// the key out of plaintext config files and ties it to this machine, but it is
+// obfuscation, not real cryptography — anyone who can run code as this user can
+// recover it. (Same threat model as browser-stored passwords without a vault.)
+
+static QByteArray obfuscationKey() {
+    QByteArray seed = QSysInfo::machineUniqueId();
+    if (seed.isEmpty())
+        seed = "FreeSpaceFinder-fallback-seed";
+    return QCryptographicHash::hash(seed + "::FreeSpaceFinder::apikey",
+                                    QCryptographicHash::Sha256);
+}
+
+static QByteArray xorWithKey(QByteArray data) {
+    const QByteArray key = obfuscationKey();
+    for (int i = 0; i < data.size(); ++i)
+        data[i] = data[i] ^ key[i % key.size()];
+    return data;
+}
+
+static QString obfuscateApiKey(const QString& plain) {
+    if (plain.isEmpty()) return {};
+    return QString::fromLatin1(xorWithKey(plain.toUtf8()).toBase64());
+}
+
+static QString deobfuscateApiKey(const QString& stored) {
+    if (stored.isEmpty()) return {};
+    return QString::fromUtf8(xorWithKey(QByteArray::fromBase64(stored.toLatin1())));
+}
+// -----------------------------------------------------------------------------
 
 // Custom delegate to draw size bars in the tree view
 class SizeBarDelegate : public QStyledItemDelegate {
@@ -96,32 +136,33 @@ void MainWindow::setupUI() {
     auto* toolbar = addToolBar("Main");
     toolbar->setMovable(false);
     toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    toolbar->setIconSize(QSize(22, 22));
 
-    auto* addFolderAction = toolbar->addAction("Add Folder");
+    auto* addFolderAction = toolbar->addAction(QIcon(":/icons/add-folder.svg"), "Add Folder");
     addFolderAction->setToolTip("Add a folder to scan");
     connect(addFolderAction, &QAction::triggered, this, &MainWindow::onAddFolder);
 
-    auto* removeFolderAction = toolbar->addAction("Remove");
+    auto* removeFolderAction = toolbar->addAction(QIcon(":/icons/remove-folder.svg"), "Remove");
     removeFolderAction->setToolTip("Remove selected folder from list");
     connect(removeFolderAction, &QAction::triggered, this, &MainWindow::onRemoveFolder);
 
     toolbar->addSeparator();
 
-    m_scanAction = toolbar->addAction("Scan");
+    m_scanAction = toolbar->addAction(QIcon(":/icons/scan.svg"), "Scan");
     m_scanAction->setShortcut(QKeySequence("Ctrl+R"));
     m_scanAction->setToolTip("Start scanning (Ctrl+R)");
     connect(m_scanAction, &QAction::triggered, this, &MainWindow::onScan);
 
-    m_cancelAction = toolbar->addAction("Cancel");
+    m_cancelAction = toolbar->addAction(QIcon(":/icons/cancel.svg"), "Cancel");
     m_cancelAction->setEnabled(false);
     connect(m_cancelAction, &QAction::triggered, m_scanner, &Scanner::cancel);
 
-    m_clearAction = toolbar->addAction("Clear");
+    m_clearAction = toolbar->addAction(QIcon(":/icons/clear.svg"), "Clear");
     connect(m_clearAction, &QAction::triggered, this, &MainWindow::onClear);
 
     toolbar->addSeparator();
 
-    auto* settingsAction = toolbar->addAction("Settings");
+    auto* settingsAction = toolbar->addAction(QIcon(":/icons/settings.svg"), "Settings");
     connect(settingsAction, &QAction::triggered, this, &MainWindow::onSettings);
 
     // Progress
@@ -162,6 +203,29 @@ void MainWindow::setupUI() {
     connect(m_folderList, &QListWidget::itemDoubleClicked, this, [this]() {
         onRemoveFolder();
     });
+    m_folderList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_folderList, &QListWidget::customContextMenuRequested, this,
+            [this](const QPoint& pos) {
+        QListWidgetItem* item = m_folderList->itemAt(pos);
+        if (!item) return;
+        QString path = item->text();
+
+        QMenu menu(this);
+        QAction* open = menu.addAction(QIcon(":/icons/add-folder.svg"),
+                                       QString("Open folder \"%1\"").arg(path));
+        connect(open, &QAction::triggered, this, [path]() {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        });
+        QAction* copyPath = menu.addAction("Copy path");
+        connect(copyPath, &QAction::triggered, this, [path]() {
+            QGuiApplication::clipboard()->setText(path);
+        });
+        menu.addSeparator();
+        QAction* remove = menu.addAction(QIcon(":/icons/remove-folder.svg"),
+                                         "Remove from list");
+        connect(remove, &QAction::triggered, this, &MainWindow::onRemoveFolder);
+        menu.exec(m_folderList->viewport()->mapToGlobal(pos));
+    });
     leftLayout->addWidget(m_folderList);
 
     m_treeView = new QTreeView;
@@ -176,6 +240,41 @@ void MainWindow::setupUI() {
     m_treeView->setAlternatingRowColors(true);
     m_treeView->setAnimated(true);
     m_treeView->setIndentation(16);
+    m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_treeView, &QTreeView::customContextMenuRequested, this,
+            [this](const QPoint& pos) {
+        QModelIndex proxyIdx = m_treeView->indexAt(pos);
+        if (!proxyIdx.isValid()) return;
+        QModelIndex idx = m_proxyModel->mapToSource(proxyIdx);
+        QString path = idx.data(FileModel::PathRole).toString();
+        if (path.isEmpty()) return;
+        bool isDir = idx.data(FileModel::IsDirectoryRole).toBool();
+        QString target = isDir ? path : QFileInfo(path).absolutePath();
+
+        QMenu menu(this);
+        QAction* open = menu.addAction(QIcon(":/icons/add-folder.svg"),
+            isDir ? QString("Open folder \"%1\"").arg(idx.data(Qt::DisplayRole).toString())
+                  : QString("Open containing folder"));
+        connect(open, &QAction::triggered, this, [target]() {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(target));
+        });
+        menu.addSeparator();
+        QAction* copyPath = menu.addAction("Copy path");
+        connect(copyPath, &QAction::triggered, this, [path]() {
+            QGuiApplication::clipboard()->setText(path);
+        });
+        if (!isDir) {
+            QAction* copyDirPath = menu.addAction("Copy folder path");
+            connect(copyDirPath, &QAction::triggered, this, [target]() {
+                QGuiApplication::clipboard()->setText(target);
+            });
+        }
+        QAction* copyName = menu.addAction("Copy name");
+        connect(copyName, &QAction::triggered, this, [path]() {
+            QGuiApplication::clipboard()->setText(QFileInfo(path).fileName());
+        });
+        menu.exec(m_treeView->viewport()->mapToGlobal(pos));
+    });
     leftLayout->addWidget(m_treeView, 1);
 
     topSplitter->addWidget(leftWidget);
@@ -203,12 +302,12 @@ void MainWindow::setupUI() {
 
 void MainWindow::setupMenu() {
     auto* fileMenu = menuBar()->addMenu("&File");
-    fileMenu->addAction("&Add Folder...", this, &MainWindow::onAddFolder, QKeySequence("Ctrl+O"));
-    fileMenu->addAction("&Scan", this, &MainWindow::onScan, QKeySequence("Ctrl+R"));
+    fileMenu->addAction("&Add Folder...", QKeySequence("Ctrl+O"), this, &MainWindow::onAddFolder);
+    fileMenu->addAction("&Scan", QKeySequence("Ctrl+R"), this, &MainWindow::onScan);
     fileMenu->addSeparator();
     fileMenu->addAction("&Settings...", this, &MainWindow::onSettings);
     fileMenu->addSeparator();
-    fileMenu->addAction("&Quit", qApp, &QApplication::quit, QKeySequence("Ctrl+Q"));
+    fileMenu->addAction("&Quit", QKeySequence("Ctrl+Q"), qApp, &QApplication::quit);
 }
 
 void MainWindow::loadSettings() {
@@ -218,15 +317,17 @@ void MainWindow::loadSettings() {
         if (!f.isEmpty())
             m_folderList->addItem(f);
     }
-    QString apiKey = s.value("apiKey").toString();
+    QString apiKey = deobfuscateApiKey(s.value("apiKeyEnc").toString());
+    if (apiKey.isEmpty()) {
+        // Migrate legacy plaintext entry if present
+        apiKey = s.value("apiKey").toString();
+        if (!apiKey.isEmpty())
+            s.remove("apiKey");
+    }
+    if (apiKey.isEmpty())
+        apiKey = qEnvironmentVariable("ANTHROPIC_API_KEY");
     if (!apiKey.isEmpty())
         m_aiClient->setApiKey(apiKey);
-    else {
-        // Fall back to env var
-        QString envKey = qEnvironmentVariable("ANTHROPIC_API_KEY");
-        if (!envKey.isEmpty())
-            m_aiClient->setApiKey(envKey);
-    }
     restoreGeometry(s.value("geometry").toByteArray());
 }
 
@@ -236,7 +337,11 @@ void MainWindow::saveSettings() {
     for (int i = 0; i < m_folderList->count(); ++i)
         folders << m_folderList->item(i)->text();
     s.setValue("folders", folders);
-    s.setValue("apiKey", m_aiClient->apiKey());
+    s.remove("apiKey");  // never keep the legacy plaintext entry
+    if (m_aiClient->apiKey().isEmpty())
+        s.remove("apiKeyEnc");
+    else
+        s.setValue("apiKeyEnc", obfuscateApiKey(m_aiClient->apiKey()));
     s.setValue("geometry", saveGeometry());
 }
 

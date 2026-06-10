@@ -87,6 +87,7 @@ QVariant FileModel::data(const QModelIndex& index, int role) const {
     if (role == SizeRole) return node->size;
     if (role == MaxSizeRole) return m_totalSize;
     if (role == IsDirectoryRole) return node->isDir;
+    if (role == PathRole) return node->path;
 
     if (role == Qt::TextAlignmentRole && index.column() == ColSize)
         return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);

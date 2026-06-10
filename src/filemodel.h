@@ -7,7 +7,7 @@ class FileModel : public QAbstractItemModel {
     Q_OBJECT
 public:
     enum Column { ColName = 0, ColSize, ColLastAccessed, ColModified, ColCount };
-    enum UserRole { SizeRole = Qt::UserRole + 1, MaxSizeRole, IsDirectoryRole };
+    enum UserRole { SizeRole = Qt::UserRole + 1, MaxSizeRole, IsDirectoryRole, PathRole };
 
     explicit FileModel(QObject* parent = nullptr);
 
